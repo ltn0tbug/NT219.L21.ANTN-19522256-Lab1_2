@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <time.h>
+#include <thread>
 using namespace std;
 
 #ifdef _WIN32
@@ -122,19 +123,19 @@ int final_perm[64] = {
     35, 3, 43, 11, 51, 19, 59, 27,
     34, 2, 42, 10, 50, 18, 58, 26,
     33, 1, 41, 9, 49, 17, 57, 25};
-
+// string to wstring
 wstring string_to_wstring(const string &utf8Str)
 {
     wstring_convert<codecvt_utf8_utf16<wchar_t>> conv;
     return conv.from_bytes(utf8Str);
 }
-
+// wstring to string
 string wstring_to_string(const wstring &utf16Str)
 {
     wstring_convert<codecvt_utf8_utf16<wchar_t>> conv;
     return conv.to_bytes(utf16Str);
 }
-
+// PKCS cho block 64 bit
 void PKCS5_padding(string &str)
 {
     // n bằng 8 trừ đi độ dài của crStr module 8 (8 - crStr mod 8)
@@ -143,7 +144,7 @@ void PKCS5_padding(string &str)
     int n = str.length() + numByteEtra;
     str.resize(n, numByteEtra);
 }
-
+// de PKCS cho block 64 bit
 void de_PKCS5_padding(string &str)
 {
     // n bằng giá trị của phần tử cuối cùng của crStr (n=crStr[crStr.lengh()-1])
@@ -151,7 +152,7 @@ void de_PKCS5_padding(string &str)
     int byteExtra = str[str.length() - 1];
     str.resize(str.length() - byteExtra);
 }
-
+// string 16 byte to bitset<64>
 void str_to_word64(const uint8_t *str_c, bitset<64> &block)
 {
     // chuyển chuỗi str[4] về 1 word(64 bit)
@@ -164,7 +165,7 @@ void str_to_word64(const uint8_t *str_c, bitset<64> &block)
     }
     block |= (((bitset<64>)str_c[7]) & offset);
 }
-
+// string bitset<64> 16 byte
 void word64_to_str(const bitset<64> &block, uint8_t *str_c)
 {
     // chuyển một word(64 bit) về chuỗi str[4]
@@ -183,7 +184,7 @@ void word64_to_str(const bitset<64> &block, uint8_t *str_c)
         str_c[7 - i] = char(tmp);
     }
 }
-
+// chuỗi ascii thành chuỗi hex
 string text_to_hex(const string &textStr)
 {
     // chuyển chuỗi ascii về chuỗi hex
@@ -198,7 +199,7 @@ string text_to_hex(const string &textStr)
     }
     return hexStr;
 }
-
+// lấy 56 bits key
 bitset<56> get_fifty_six_bit_key(const bitset<64> &binKey)
 {
     // lấy 58 key theo bảng keyp
@@ -209,7 +210,7 @@ bitset<56> get_fifty_six_bit_key(const bitset<64> &binKey)
     }
     return fs_key;
 }
-
+// shift left
 void shift_left(bitset<28> &binkey, int n)
 {
     // shift trái n bit
@@ -222,7 +223,7 @@ void shift_left(bitset<28> &binkey, int n)
         binkey[0] = tmp[0];
     }
 }
-
+// shift right
 void shift_right(bitset<28> &binkey, int n)
 {
     // shift phải n bit
@@ -235,7 +236,7 @@ void shift_right(bitset<28> &binkey, int n)
         binkey[27] = tmp[0];
     }
 }
-
+// lấy 48 bit ky từ 56 bit key
 bitset<48> get_forty_eight_bit_key(const bitset<56> &binKey)
 {
     // lấy 48 bitkey theo bảng key_comp
@@ -244,7 +245,7 @@ bitset<48> get_forty_eight_bit_key(const bitset<56> &binKey)
         fe_key[47 - i] = binKey[56 - key_comp[i]];
     return fe_key;
 }
-
+// hoán vị đầu
 bitset<64> inital_permute(const bitset<64> &binPlain)
 {
     //hoán vị các phần từ bằng bảng initial_pern
@@ -255,7 +256,7 @@ bitset<64> inital_permute(const bitset<64> &binPlain)
     }
     return ip_plain;
 }
-
+// mở rộng ky từ 32 lên 48
 bitset<48> expand_to_forty_eight_bit(const bitset<32> &binPlain)
 {
     //mở rộng plain từ 32 bit thành 64 bit
@@ -264,7 +265,7 @@ bitset<48> expand_to_forty_eight_bit(const bitset<32> &binPlain)
         fe_expand[47 - i] = binPlain[32 - exp_d[i]];
     return fe_expand;
 }
-
+// thay thế với sbox
 bitset<32> Sbox_substitute(const bitset<48> &binXor1)
 {
     // thay thế các phần tử với bản sbox
@@ -282,7 +283,7 @@ bitset<32> Sbox_substitute(const bitset<48> &binXor1)
     }
     return sbox;
 }
-
+// thay thế pbox
 bitset<32> Pbox_permute(const bitset<32> &binSbox)
 {
     // hoán vị các phần từ theo bảng per
@@ -291,7 +292,7 @@ bitset<32> Pbox_permute(const bitset<32> &binSbox)
         Pbox[31 - i] = binSbox[32 - per[i]];
     return Pbox;
 }
-
+// hoán vị lần cuối
 bitset<64> final_permute(const bitset<64> &text)
 {
     //hoán vị các phần từ theo bảng final_pern
@@ -302,7 +303,7 @@ bitset<64> final_permute(const bitset<64> &text)
     }
     return fn_per;
 }
-
+// tạo key round
 bitset<48> *gernerate_key(const bitset<64> &binKey)
 {
     bitset<48> *roundkey = new bitset<48>[16];
@@ -325,7 +326,7 @@ bitset<48> *gernerate_key(const bitset<64> &binKey)
     }
     return roundkey;
 }
-
+// encrypt 1 block
 void des_encrypt(const bitset<64> &plain, bitset<64> &cipher, const bitset<48> *roundkey)
 {
     // hóa vị đầu
@@ -379,7 +380,7 @@ void des_encrypt(const bitset<64> &plain, bitset<64> &cipher, const bitset<48> *
     binCombine |= bitset<64>(binPlain_right.to_ullong());
     cipher = final_permute(binCombine);
 }
-
+// decrypt 1 block
 void des_decrypt(const bitset<64> &cipher, bitset<64> &recovered, const bitset<48> *roundkey)
 {
     bitset<64> bincipher = cipher;
@@ -434,7 +435,7 @@ void des_decrypt(const bitset<64> &cipher, bitset<64> &recovered, const bitset<4
     binCombine |= bitset<64>(binCipher_right.to_ullong());
     recovered = final_permute(binCombine);
 }
-
+// encrypt with CBC mode
 void des_encrypt_CBC_mode(const string &plain, string &cipher, const bitset<48> *roundkey, const bitset<64> iv)
 {
     // gán plain vào cipher
@@ -462,13 +463,9 @@ void des_encrypt_CBC_mode(const string &plain, string &cipher, const bitset<48> 
         tmpBlock = cipherBlock;
     }
 }
-
-void des_decrypt_CBC_mode(const string &cipher, string &recovered, const bitset<48> *roundkey, const bitset<64> iv)
+// decrypt core thread
+void des_decrypt_CBC_core(const char *cipher, char *recovered, const bitset<48> *roundkey, const bitset<64> iv, const int &nBlock)
 {
-    // gán plain vào cipher
-    recovered = cipher;
-    // số block encrypt
-    int numberOfBlock = recovered.length() / 8;
     bitset<64> cipherBlock;
     bitset<64> tmpBlock;
     bitset<64> recoverBlock;
@@ -477,7 +474,7 @@ void des_decrypt_CBC_mode(const string &cipher, string &recovered, const bitset<
     recoverBlock ^= iv;
     word64_to_str(recoverBlock, (uint8_t *)&recovered[0]);
     tmpBlock = cipherBlock;
-    for (int i = 1; i < numberOfBlock; ++i)
+    for (int i = 1; i < nBlock; ++i)
     {
         str_to_word64((uint8_t *)&recovered[i << 3], cipherBlock);
         des_decrypt(cipherBlock, recoverBlock, roundkey);
@@ -485,9 +482,57 @@ void des_decrypt_CBC_mode(const string &cipher, string &recovered, const bitset<
         word64_to_str(recoverBlock, (uint8_t *)&recovered[i << 3]);
         tmpBlock = cipherBlock;
     }
-    de_PKCS5_padding(recovered);
 }
-
+// decrypt with CBC mode
+void des_decrypt_CBC_mode(const string &cipher, string &recovered, const bitset<48> *roundkey, const bitset<64> iv)
+{
+    // gán plain vào cipher
+    recovered = cipher;
+    // số block encrypt
+    int numberOfBlock = recovered.length() >> 3;
+    // số thread
+    int nThread = numberOfBlock >> 8;
+    thread *decrypt_threads = new thread[nThread + 1];
+    // biến tạm
+    int j;
+    // iv tạm
+    bitset<64> tmp;
+    // kiểm tra nếu số block < 256 thì k khởi tạo thread
+    if (nThread)
+    {
+        // khởi tạo thread 0
+        decrypt_threads[0] = thread(des_decrypt_CBC_core, (char *)&cipher[0], (char *)&recovered[0], roundkey, iv, 256);
+        for (int i = 1; i < nThread; ++i)
+        {
+            // vị trí của recovered text được chuyền vào thread(i*256)
+            j = i << 11;
+            // khởi tạo thread
+            str_to_word64((uint8_t *)&cipher[j - 8], tmp);
+            decrypt_threads[i] = thread(des_decrypt_CBC_core, (char *)&cipher[j], (char *)&recovered[j], roundkey, tmp, 256);
+        }
+        // kiểm tra xem có thread thiếu hay k(block<256)
+        if (numberOfBlock % 256)
+        {
+            // vị trí của recovered text của thread cuối (thread k đủ 256 block)
+            j = nThread << 11;
+            str_to_word64((uint8_t *)&cipher[j - 8], tmp);
+            decrypt_threads[nThread] = thread(des_decrypt_CBC_core, (char *)&cipher[j], (char *)&recovered[j], roundkey, tmp, numberOfBlock % 256);
+            ++nThread;
+        }
+        //phần lỗi
+        for (int i = 0; i < nThread; ++i)
+        {
+            if (decrypt_threads[i].joinable())
+                decrypt_threads[i].join();
+        }
+    }
+    else
+        des_decrypt_CBC_core((char *)&cipher[0], (char *)&recovered[0], roundkey, iv, numberOfBlock);
+    de_PKCS5_padding(recovered);
+    //giải phóng thread
+    delete[] decrypt_threads;
+}
+// xóa các ký tự '\n'trong stdin
 void DiscardLFFromStdin(const int &num)
 {
     int tmp = num;
@@ -497,7 +542,7 @@ void DiscardLFFromStdin(const int &num)
             if (c == WEOF)
                 return;
 }
-
+// nhập key từ bàn phím
 void InputKeyFromSreen(string &key)
 {
     //nhập key từ bàn phím
@@ -520,7 +565,7 @@ void InputKeyFromSreen(string &key)
     // chuyển wkey(wstring) về key(string)
     key = wstring_to_string(wkey);
 }
-
+// nhập plain từ bàn phím
 void InputPlainFromScreen(string &plain)
 {
     //nhập plaintext từ bàn phím
@@ -534,7 +579,7 @@ void InputPlainFromScreen(string &plain)
     // chuyển wplain(wstring) về plain(string)
     plain = wstring_to_string(wplain);
 }
-
+// nhập iv,key từ file
 void InputStringFromFile(const string &filename, string &str, const int &strlen)
 {
     fstream readFile(filename, ios::in);
@@ -561,7 +606,7 @@ void InputStringFromFile(const string &filename, string &str, const int &strlen)
     }
     readFile.close();
 }
-
+// quá trình nhập các thông số plain,key,iv
 void InputProcess(string &plain, string &key, string &iv)
 {
 
@@ -627,7 +672,7 @@ void InputProcess(string &plain, string &key, string &iv)
     wcout << "Input process succeeded\n";
     wcout << "---------------------\n";
 }
-
+// in ra input đã nhập
 void OutputProcess(const string &plain, const string &key, const string &iv)
 {
     wcout << "plain text size: " << plain.length() << endl;
@@ -653,7 +698,7 @@ int main()
     clock_t start, end;
 
     start = clock();
-    for (int i = 0; i < 10000; ++i)
+    for (int i = 0; i < 1000; ++i)
     {
         // tạo round key
         bitset<48> *roundkey = gernerate_key(binkey);
@@ -664,30 +709,23 @@ int main()
     }
     end = clock();
     wcout << "Cipher text: " << string_to_wstring(text_to_hex(cipher)) << endl;
-    // in thời gian thực hiện encrypt 10000 lần
-    wcout << "Time for encryption (10 000 times): " << ((double)(end - start)) / CLOCKS_PER_SEC * 1000 << "ms" << endl;
+    // in thời gian thực hiện encrypt 1000 lần
+    wcout << "Time for encryption (1 000 times): " << ((double)(end - start)) / CLOCKS_PER_SEC * 1000 << "ms" << endl;
 
-    try
+    start = clock();
+    for (int i = 0; i < 1000; ++i)
     {
-        start = clock();
-        for (int i = 0; i < 10000; ++i)
-        {
-            // tạo round key
-            bitset<48> *roundkey = gernerate_key(binkey);
-            // decrypt
-            recovered.clear();
-            des_decrypt_CBC_mode(cipher, recovered, roundkey, biniv);
-             delete[] roundkey;
-        }
-        end = clock();
-        // in kết quả recoverd
-        wcout << "Recovered text: " << string_to_wstring(recovered) << endl;
+        // tạo round key
+        bitset<48> *roundkey = gernerate_key(binkey);
+        // decrypt
+        recovered.clear();
+        des_decrypt_CBC_mode(cipher, recovered, roundkey, biniv);
+        delete[] roundkey;
     }
-    catch (const std::exception &e)
-    {
-        std::cerr << e.what() << '\n';
-    }
+    end = clock();
+    // in kết quả recoverd
+    wcout << "Recovered text: " << string_to_wstring(recovered) << endl;
 
-    //in thời gian decrypt 10000 lần
-    wcout << "Time for decryption (10 000 times): " << ((double)(end - start)) / CLOCKS_PER_SEC * 1000 << "ms" << endl;
+    //in thời gian decrypt 1000 lần
+    wcout << "Time for decryption (1 000 times): " << ((double)(end - start)) / CLOCKS_PER_SEC * 1000 << "ms" << endl;
 }
