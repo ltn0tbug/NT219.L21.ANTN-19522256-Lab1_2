@@ -9,7 +9,6 @@
 #include <vector>
 #include <thread>
 #include <time.h>
-#include <mutex>
 #include <assert.h>
 
 using namespace std;
@@ -218,6 +217,8 @@ void inv_sub_bytes(byte *state);
 void shift_row(byte *state);
 // inv shift row
 void inv_shift_row(byte *state);
+// nhân hai phần tử của ma trận
+byte FFmul(const byte &a, const byte &b);
 // mix column
 void mix_col(byte *state);
 // inv mix column
@@ -232,7 +233,7 @@ void aes_encrypt(byte *en_msg, const byte *expandedKeys, const int &keysize);
 void aes_decrypt(byte *de_msg, const byte *expandedKeys, const int &keysize);
 // aes decrypt with CBC mode
 void aes_encrypt_CBC_mode(const string &plain, string &cipher, const byte *expandedKeys, const int &keysize, const byte iv[16]);
-// thread core
+// aes decrypt thread core 
 void aes_decrypt_CBC_core(byte *recovered, const byte *cipher, const byte *expandedKeys, const int &keysize, const byte *iv, const int &nBlock);
 // aes decrypt with CBC mode
 void aes_decrypt_CBC_mode(const string &cipher, string &recovered, const byte *expandedKeys, const int &keysize, const byte iv[16]);
@@ -433,73 +434,64 @@ void inv_shift_row(byte *state)
 
 void mix_col(byte *state)
 {
-    //nhân ma trận
-    //  [2 3 1 1]
-    //  [1 2 3 1]
-    //  [1 1 2 3]
-    //  [3 1 1 2]
-    //sử dụng mul2,mul3
+    byte tmp[4];
+    int j;
+    for (int i = 0; i < 4; ++i)
+    {
+        j = i << 2;
+        tmp[0] = state[j];
+        tmp[1] = state[j + 1];
+        tmp[2] = state[j + 2];
+        tmp[3] = state[j + 3];
+        state[j] = FFmul(0x02, tmp[0]) ^ FFmul(0x03, tmp[1]) ^ FFmul(0x01, tmp[2]) ^ FFmul(0x01, tmp[3]);
+        state[j + 1] = FFmul(0x02, tmp[1]) ^ FFmul(0x03, tmp[2]) ^ FFmul(0x01, tmp[3]) ^ FFmul(0x01, tmp[0]);
+        state[j + 2] = FFmul(0x02, tmp[2]) ^ FFmul(0x03, tmp[3]) ^ FFmul(0x01, tmp[0]) ^ FFmul(0x01, tmp[1]);
+        state[j + 3] = FFmul(0x02, tmp[3]) ^ FFmul(0x03, tmp[0]) ^ FFmul(0x01, tmp[1]) ^ FFmul(0x01, tmp[2]);
+    }
+}
 
-    //cột 1
-    static byte tmp[16];
-    tmp[0] = mul2[state[0]] ^ mul3[state[1]] ^ state[2] ^ state[3];
-    tmp[1] = state[0] ^ mul2[state[1]] ^ mul3[state[2]] ^ state[3];
-    tmp[2] = state[0] ^ state[1] ^ mul2[state[2]] ^ mul3[state[3]];
-    tmp[3] = mul3[state[0]] ^ state[1] ^ state[2] ^ mul2[state[3]];
-    //cột 2
-    tmp[4] = mul2[state[4]] ^ mul3[state[5]] ^ state[6] ^ state[7];
-    tmp[5] = state[4] ^ mul2[state[5]] ^ mul3[state[6]] ^ state[7];
-    tmp[6] = state[4] ^ state[5] ^ mul2[state[6]] ^ mul3[state[7]];
-    tmp[7] = mul3[state[4]] ^ state[5] ^ state[6] ^ mul2[state[7]];
-    //cột 3
-    tmp[8] = mul2[state[8]] ^ mul3[state[9]] ^ state[10] ^ state[11];
-    tmp[9] = state[8] ^ mul2[state[9]] ^ mul3[state[10]] ^ state[11];
-    tmp[10] = state[8] ^ state[9] ^ mul2[state[10]] ^ mul3[state[11]];
-    tmp[11] = mul3[state[8]] ^ state[9] ^ state[10] ^ mul2[state[11]];
-    //cột 4
-    tmp[12] = mul2[state[12]] ^ mul3[state[13]] ^ state[14] ^ state[15];
-    tmp[13] = state[12] ^ mul2[state[13]] ^ mul3[state[14]] ^ state[15];
-    tmp[14] = state[12] ^ state[13] ^ mul2[state[14]] ^ mul3[state[15]];
-    tmp[15] = mul3[state[12]] ^ state[13] ^ state[14] ^ mul2[state[15]];
-
-    int i = 16;
-    while (i--)
-        state[i] = tmp[i];
+byte FFmul(const byte &a, const byte &b)
+{
+    byte bw[4];
+    byte res = 0;
+    int i;
+    bw[0] = b;
+    for (i = 1; i < 4; i++)
+    {
+        bw[i] = bw[i - 1] << 1;
+        if (bw[i - 1] & 0x80)
+        {
+            bw[i] ^= 0x1b;
+        }
+    }
+    for (i = 0; i < 4; i++)
+    {
+        if ((a >> i) & 0x01)
+        {
+            res ^= bw[i];
+        }
+    }
+    return res;
 }
 
 void inv_mix_col(byte *state)
 {
-    //nhân với ma trận
-    //  0E 0B 0D 09
-    //  09 0E 0B 0D
-    //  0D 09 0E 0B
-    //  0B 0D 09 0E
-    // sử dụng mul11,mul13,mul14
-    static byte tmp[16];
-    //cột 1
-    tmp[0] = mul14[state[0]] ^ mul11[state[1]] ^ mul13[state[2]] ^ mul9[state[3]];
-    tmp[1] = mul9[state[0]] ^ mul14[state[1]] ^ mul11[state[2]] ^ mul13[state[3]];
-    tmp[2] = mul13[state[0]] ^ mul9[state[1]] ^ mul14[state[2]] ^ mul11[state[3]];
-    tmp[3] = mul11[state[0]] ^ mul13[state[1]] ^ mul9[state[2]] ^ mul14[state[3]];
-    //cột 2
-    tmp[4] = mul14[state[4]] ^ mul11[state[5]] ^ mul13[state[6]] ^ mul9[state[7]];
-    tmp[5] = mul9[state[4]] ^ mul14[state[5]] ^ mul11[state[6]] ^ mul13[state[7]];
-    tmp[6] = mul13[state[4]] ^ mul9[state[5]] ^ mul14[state[6]] ^ mul11[state[7]];
-    tmp[7] = mul11[state[4]] ^ mul13[state[5]] ^ mul9[state[6]] ^ mul14[state[7]];
-    //cột 3
-    tmp[8] = mul14[state[8]] ^ mul11[state[9]] ^ mul13[state[10]] ^ mul9[state[11]];
-    tmp[9] = mul9[state[8]] ^ mul14[state[9]] ^ mul11[state[10]] ^ mul13[state[11]];
-    tmp[10] = mul13[state[8]] ^ mul9[state[9]] ^ mul14[state[10]] ^ mul11[state[11]];
-    tmp[11] = mul11[state[8]] ^ mul13[state[9]] ^ mul9[state[10]] ^ mul14[state[11]];
-    //cột 4
-    tmp[12] = mul14[state[12]] ^ mul11[state[13]] ^ mul13[state[14]] ^ mul9[state[15]];
-    tmp[13] = mul9[state[12]] ^ mul14[state[13]] ^ mul11[state[14]] ^ mul13[state[15]];
-    tmp[14] = mul13[state[12]] ^ mul9[state[13]] ^ mul14[state[14]] ^ mul11[state[15]];
-    tmp[15] = mul11[state[12]] ^ mul13[state[13]] ^ mul9[state[14]] ^ mul14[state[15]];
-    int i = 16;
-    while (i--)
-        state[i] = tmp[i];
+    byte tmp[4];
+    int j;
+    for (int i = 0; i < 4; ++i)
+    {
+        j = i << 2;
+        tmp[0] = state[j];
+        tmp[1] = state[j + 1];
+        tmp[2] = state[j + 2];
+        tmp[3] = state[j + 3];
+        state[j] = FFmul(0x0e, tmp[0]) ^ FFmul(0x0b, tmp[1]) ^ FFmul(0x0d, tmp[2]) ^ FFmul(0x09, tmp[3]);
+        state[j + 1] = FFmul(0x0e, tmp[1]) ^ FFmul(0x0b, tmp[2]) ^ FFmul(0x0d, tmp[3]) ^ FFmul(0x09, tmp[0]);
+        state[j + 2] = FFmul(0x0e, tmp[2]) ^ FFmul(0x0b, tmp[3]) ^ FFmul(0x0d, tmp[0]) ^ FFmul(0x09, tmp[1]);
+        state[j + 3] = FFmul(0x0e, tmp[3]) ^ FFmul(0x0b, tmp[0]) ^ FFmul(0x0d, tmp[1]) ^ FFmul(0x09, tmp[2]);
+    }
 }
+
 
 void KeyExpansionCore(byte in[4], const int &i)
 {
@@ -654,7 +646,7 @@ void aes_encrypt_CBC_mode(const string &plain, string &cipher, const byte *expan
     }
 }
 
-void aes_decrypt_CBC_core(byte *recovered, const byte *cipher, const byte *expandedKeys, const int &keysize, const byte *iv, const int &n)
+void aes_decrypt_CBC_core(byte *recovered, const byte *cipher, const byte *expandedKeys, const int &keysize, const byte *iv, const int &nBlock)
 {
 
     // khai báo các con trỏ word để lưu địa chỉ recovered,cipher và iv
@@ -664,14 +656,14 @@ void aes_decrypt_CBC_core(byte *recovered, const byte *cipher, const byte *expan
 
     // decrypt block đầu tiên và xor với iv
     aes_decrypt((byte *)&recovered[0], expandedKeys, keysize);
+
     wrecovered[0] ^= wiv[0];
     wrecovered[1] ^= wiv[1];
     wrecovered[2] ^= wiv[2];
     wrecovered[3] ^= wiv[3];
-
     // decrypt n-1 block tiếp theo
     int j;
-    for (int i = 1; i < n; ++i)
+    for (int i = 1; i < nBlock; ++i)
     {
         // decrypt block i
         aes_decrypt((byte *)&recovered[i << 4], expandedKeys, keysize);
@@ -686,85 +678,49 @@ void aes_decrypt_CBC_core(byte *recovered, const byte *cipher, const byte *expan
 
 void aes_decrypt_CBC_mode(const string &cipher, string &recovered, const byte *expandedKeys, const int &keysize, const byte *iv)
 {
-    // chuyển cipher text ban đầu vào recovered text
+       // chuyển cipher text ban đầu vào recovered text
     recovered = cipher;
     // biến tạm
     int j;
     // tổng số block
     int n = cipher.length() >> 4;
-#if 0
-    // // số thread
-    // int nThread = n >> 8;
-    // thread *decrypt_threads = new thread[1];
-    // // kiểm tra nếu số block < 256 thì k khởi tạo thread
-
-    // if (nThread)
-    // {
-    //     // khởi tạo thread 0
-    //     decrypt_threads[0] = thread(aes_decrypt_CBC_core, (byte *)&recovered[0], (byte *)&cipher[0], expandedKeys, keysize, iv, 256);
-    //     decrypt_threads[0].join();
-    //     for (int i = 1; i < nThread; ++i)
-    //     {
-    //         // vị trí của recovered text được chuyền vào thread(i*256)
-    //         j = i << 12;
-    //         // khởi tạo thread
-    //         decrypt_threads[i] = thread(aes_decrypt_CBC_core, (byte *)&recovered[j], (byte *)&cipher[j], expandedKeys, keysize, (byte *)&cipher[j - 16], 256);
-    //         decrypt_threads[i].join();
-    //     }
-    //     // kiểm tra xem có thread thiếu hay k(block<256)
-    //     if (n % 128)
-    //     {
-    //         // vị trí của recovered text của thread cuối (thread k đủ 256 block)
-    //         j = nThread << 12;
-    //         decrypt_threads[nThread] = thread(aes_decrypt_CBC_core, (byte *)&recovered[j], (byte *)&cipher[j], expandedKeys, keysize, (byte *)&cipher[j - 16], n % 256);
-    //         decrypt_threads[nThread].join();
-    //         ++nThread;
-    //     }
-    //     //phần lỗi
-    //     // for (int i = 0; i < nThread; ++i)
-    //     // {
-    //     //     //assert(decrypt_threads[i].joinable() == true);
-    //     //     if (decrypt_threads[i].joinable())
-    //     //         decrypt_threads[i].join();
-    //     // }
-    //     // decrypt_threads[0].join();
-    //     // decrypt_threads[1].join();
-    //     // decrypt_threads[2].join();
-    //     // decrypt_threads[3].join();
-    //     // decrypt_threads[4].join();
-    // }
-    // else
-    //     aes_decrypt_CBC_core((byte *)&recovered[0], (byte *)&cipher[0], expandedKeys, keysize, iv, n);
-        //giải phóng thread
-    //delete[] decrypt_threads;
-#endif
-    // khai báo các con trỏ word để lưu địa chỉ recovered,cipher và iv
-    word *wrecovered = (word *)&recovered[0];
-    word *wcipher = (word *)&cipher[0];
-    word *wiv = (word *)iv;
-
-    // decrypt block đầu tiên và xor với iv
-    aes_decrypt((byte *)&recovered[0], expandedKeys, keysize);
-    wrecovered[0] ^= wiv[0];
-    wrecovered[1] ^= wiv[1];
-    wrecovered[2] ^= wiv[2];
-    wrecovered[3] ^= wiv[3];
-
-    // decrypt n-1 block tiếp theo
-    for (int i = 1; i < n; ++i)
+    // số thread
+    int nThread = n >> 8;
+    thread *decrypt_threads = new thread[nThread + 1];
+    // kiểm tra nếu số block < 256 thì k khởi tạo thread
+    if (nThread)
     {
-        // decrypt block i
-        aes_decrypt((byte *)&recovered[i << 4], expandedKeys, keysize);
-        // xor recoveredBlock[i] với cipherBlock[i-1]
-        j = i << 2;
-        wrecovered[j] ^= wcipher[j - 4];
-        wrecovered[j + 1] ^= wcipher[j - 3];
-        wrecovered[j + 2] ^= wcipher[j - 2];
-        wrecovered[j + 3] ^= wcipher[j - 1];
+        // khởi tạo thread 0
+        decrypt_threads[0] = thread(aes_decrypt_CBC_core, (byte *)&recovered[0], (byte *)&cipher[0], expandedKeys, keysize, iv, 256);
+        for (int i = 1; i < nThread; ++i)
+        {
+            // vị trí của recovered text được chuyền vào thread(i*256)
+            j = i << 12;
+            // khởi tạo thread
+            decrypt_threads[i] = thread(aes_decrypt_CBC_core, (byte *)&recovered[j], (byte *)&cipher[j], expandedKeys, keysize, (byte *)&cipher[j - 16], 256);
+        }
+        // kiểm tra xem có thread thiếu hay k(block<256)
+        if (n % 256)
+        {
+            // vị trí của recovered text của thread cuối (thread k đủ 256 block)
+            j = nThread << 12;
+            decrypt_threads[nThread] = thread(aes_decrypt_CBC_core, (byte *)&recovered[j], (byte *)&cipher[j], expandedKeys, keysize, (byte *)&cipher[j - 16], n % 256);
+            ++nThread;
+        }
+        //phần lỗi
+        for (int i = 0; i < nThread; ++i)
+        {
+            //assert(decrypt_threads[i].joinable() == true);
+            if (decrypt_threads[i].joinable())
+                decrypt_threads[i].join();
+        }
     }
+    else
+        aes_decrypt_CBC_core((byte *)&recovered[0], (byte *)&cipher[0], expandedKeys, keysize, iv, n);
     // de padding
     de_PKCS7_padding(recovered);
-
+    //giải phóng thread
+    delete[] decrypt_threads;
 }
 
 void DiscardLFFromStdin(const int &num)
